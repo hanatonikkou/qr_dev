@@ -14,6 +14,15 @@ use image::{DynamicImage, GenericImageView, GrayImage, Luma, Pixel, Rgb, RgbImag
 use minifb::{Key, Window, WindowOptions};
 use modules::*;
 
+// Next steps for performance improvement:
+//
+// Improve qr::mapping -> point_from_hv_lines such that we're not just deriving the HV
+// lines from the the edges of the finder regions, we're also using the very edge of
+// the whole QR code itself to guide the line. This will improve the intersection point
+// so that we can accurately hit the "fourth corner". At the moment it's sort of a
+// luck of the draw if the interpolation hits exactly right, or if we're roughly a module
+// off from ideal, which causes the data around that point to be interpreted incorrectly.
+
 fn show_image(flipped_img: &DynamicImage) {
     // Get image dimensions and raw pixel data
     let (width, height) = flipped_img.dimensions();
