@@ -284,6 +284,7 @@ def read_qr(file):
     # overlay = np.zeros(rgb.shape, np.uint8)
     # for group in row_candidates:
     #     for each in group[1]:
+    #         cv2.line(overlay, (each[1][0], each[0]), (each[1][1], each[0]), (0,255,0), 1)
     # for group in col_candidates:
     #     for each in group[1]:
     #         cv2.line(overlay, (each[0], each[1][0]), (each[0], each[1][1]), (0,255,0), 1)
