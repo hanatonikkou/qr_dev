@@ -31,7 +31,7 @@ def check_ratio(left, center, right):
     else: return False
 
 # return candidates for finder patterns
-def finder_finder_sm(y, line, img):
+def finder_finder_sm(line):
     x = 0
     colors = []
     candidates = []
@@ -47,7 +47,7 @@ def finder_finder_sm(y, line, img):
         if colors[i][2] <= 6: continue
 
         max_d = colors[i][2] * UP_LIMIT
-        whitespace = False
+        whitespace = True # whitespace check disabled b/c it creates more false negatives than it sorts out false positives
 
         # check for a suitable fragment to the left
         found = False
@@ -116,12 +116,13 @@ def has_neighbors (candidate, line):
     for i in range(0, len(line)):
         comparator = line[i]
         if candidate[0] <= comparator[0] <= candidate[1] or candidate[0] <= comparator[1] <= candidate[1] \
-                or (candidate[0] > comparator[0] and candidate[1] < comparator[1]):
+                or (candidate[0] >= comparator[0] and candidate[1] <= comparator[1]):
             overlap_upper = candidate[1] if candidate[1] < comparator[1] else comparator[1]
             overlap_lower = candidate[0] if candidate[0] > comparator[0] else comparator[0]
             candidate_length = candidate[1] - candidate[0]
+            comparator_length = comparator[1] - comparator[0]
             overlap_length = overlap_upper - overlap_lower
-            if overlap_length / candidate_length > 0.8: return (True, i)
+            if overlap_length / candidate_length > 0.8 or overlap_length / comparator_length > 0.8: return (True, i)
             else: continue
         else: continue
     return False
@@ -149,7 +150,6 @@ def reject_candidates (candidates):
                     plus3 = has_neighbors(keep_or_not, candidates[line_n+3])
                 if line_n < length - 5:
                     plus4 = has_neighbors(keep_or_not, candidates[line_n+4])
-                    pass
 
                 counter = 0
                 if index >= length - 5: counter += 1 # make algorithm work at the edge of the image
@@ -181,8 +181,6 @@ def reject_candidates (candidates):
 
     # count lines in each group, mark corner points for each group
     # keep only groups with the highest line count
-    # remove groups with too large a ratio between first and last one
-    #   (these are loose groupings of false positives)
     #
     # data structure:
     #   index
@@ -203,17 +201,17 @@ def reject_candidates (candidates):
             else: candidate_groups[group_no][3] = [index, candidate[:2]]
 
     # sometimes a line will be grouped by itself, erroneously
-    for each in reversed(candidate_groups):
-        if each[1] == 1: candidate_groups.remove(each)
+    # for each in reversed(candidate_groups):
+    #     if each[1] == 1: candidate_groups.remove(each)
 
-    if area_no > 5:
-        keep_max = np.sort(counter)[area_no - 5]
+    if area_no > 6:
+        keep_max = np.sort(counter)[area_no - 6]
         for each in candidate_groups:
-            length1 = each[2][1][1] - each[2][1][0]
-            length2 = each[3][1][1] - each[3][1][0]
+            # length1 = each[2][1][1] - each[2][1][0]
+            # length2 = each[3][1][1] - each[3][1][0]
             if each[1] < keep_max: candidate_groups.remove(each)
-            elif (length1 / length2) < 0.7 or (length2 / length1) < 0.7:
-                candidate_groups.remove(each)
+            # elif (length1 / length2) < 0.7 or (length2 / length1) < 0.7:
+            #     candidate_groups.remove(each)
 
     # for each in candidates:
     #     if each: print(f"{each}")
@@ -265,10 +263,15 @@ def read_qr(file):
     (_r, rgb) = cv2.threshold(qr_raw, BW_THRESH, 255, cv2.THRESH_BINARY)
     binary = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
 
+    overlay = np.zeros(rgb.shape, np.uint8)
     row_candidates = [[]]
     for i, row in enumerate(binary):
-        row_candidates[i] = finder_finder_sm(i, row, rgb)
+        row_candidates[i] = finder_finder_sm(row)
         row_candidates += [[]]
+    # for i, row in enumerate(row_candidates):
+    #     if row:
+    #         for candidate in row:
+    #             cv2.line(overlay, (candidate[0], i), (candidate[1], i), (0,0,255), 1)
     row_candidates = reject_candidates(row_candidates)
     if row_candidates == False: return
     # for row in row_candidates:
@@ -276,8 +279,12 @@ def read_qr(file):
 
     col_candidates = [[]]
     for i, col in enumerate(binary.T):
-        col_candidates[i] = finder_finder_sm(i, col, rgb)
+        col_candidates[i] = finder_finder_sm(col)
         col_candidates += [[]]
+    # for i, col in enumerate(col_candidates):
+    #     if col:
+    #         for candidate in col:
+    #             cv2.line(overlay, (i, candidate[0]), (i, candidate[1]), (0, 0, 255), 1)
     col_candidates = reject_candidates(col_candidates)
     if col_candidates == False: return
 
@@ -287,14 +294,14 @@ def read_qr(file):
     #         cv2.line(overlay, (each[1][0], each[0]), (each[1][1], each[0]), (0,255,0), 1)
     # for group in col_candidates:
     #     for each in group[1]:
-    #         cv2.line(overlay, (each[0], each[1][0]), (each[0], each[1][1]), (0,255,0), 1)
+    #         cv2.line(overlay, (each[0], each[1][0]), (each[0], each[1][1]), (255,255,0), 1)
 
     #
     # for testing the return of finder_finder_sm
-    # # for i, col in enumerate(col_candidates):
-    # #     if col:
-    # #         for candidate in col:
-    # #             cv2.line(overlay, (i, candidate[0]), (i, candidate[1]), (255, 0, 255), 1)
+    # for i, col in enumerate(col_candidates):
+    #     if col:
+    #         for candidate in col:
+    #             cv2.line(overlay, (i, candidate[0]), (i, candidate[1]), (255, 0, 255), 1)
 
     # count overlapping pixels
     pixel_counts = np.zeros((len(row_candidates), len(col_candidates)), np.uint32)
@@ -388,7 +395,7 @@ def read_qr(file):
     if d2 > d1 and d2 > d3: UL_corner = marks[0]; sec_corner = marks[1]; third_corner = marks[2];
     if d3 > d1 and d3 > d2: UL_corner = marks[1]; sec_corner = marks[2]; third_corner = marks[0];
 
-    overlay = np.zeros(rgb.shape, np.uint8)
+    # overlay = np.zeros(rgb.shape, np.uint8)
     for mark in marks: cv2.circle(overlay, mark, 3, (0,255,0), 1)
     draw_cross(overlay, UL_corner, (0,255,0))
 
@@ -410,12 +417,21 @@ def read_qr(file):
     matrix = cv2.getAffineTransform(src_pts, tgt_pts)
     affined = cv2.warpAffine(rgb, matrix, (w, h))
 
+    factor = 1
     blended = cv2.addWeighted(overlay, 1.0, rgb, 0.5, 0)
-    show = cv2.hconcat([ blended, affined ])
+    blended1 = cv2.resize(blended, (0, 0), fx=factor, fy=factor)
+    affined1 = cv2.resize(affined, (0, 0), fx=factor, fy=factor)
+    show = cv2.hconcat([ blended1, affined1 ])
     cv2.imshow('demo', show)
     cv2.waitKey(0)
 
 directory = 'images/'
+file = 'images/test2.png'
+file = 'images/source5.png'
 
-for file in os.scandir(directory):
-    if file.is_file(): read_qr(file.path)
+if False:
+# if True:
+    read_qr(file)
+else:
+    for file in os.scandir(directory):
+        if file.is_file(): read_qr(file.path)
